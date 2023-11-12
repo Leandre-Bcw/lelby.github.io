@@ -2,3 +2,5 @@ start.sh
 .hugo_build.lock
 .obsidian
 .vscode
+resources
+public
