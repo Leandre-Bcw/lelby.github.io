@@ -1,4 +1,4 @@
-baseURL = "https://lelby.github.io"
+baseURL = ""
 
 # Change the default theme to be use when building the site with Hugo
 theme = "LoveIt"
@@ -73,7 +73,7 @@ enableEmoji = true
   # ["sha256", "sha384", "sha512", "md5"]
   # fingerprint = ""
   #  date format
-  dateFormat = "01/02/2006"
+  dateFormat = "02/01/2006"
   # website title for Open Graph and Twitter Cards
   title = "Blog personnel de LelBy"
   # website description for RSS, SEO, Open Graph and Twitter Cards

@@ -1,0 +1,4 @@
+start.sh
+*.lock
+.obsidian
+.vscode
