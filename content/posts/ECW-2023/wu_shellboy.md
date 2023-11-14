@@ -4,8 +4,8 @@ subtitle: ""
 date: 2023-11-01
 draft: false
 author: "LelBy"
-description: ""
-images: []
+description: "Write-Up du challenge de pwn \"Shellboy\" de l'ECW 2023"
+images: ["/images/ECW-2023/shellboy_main.png"]
 
 tags: ["ECW", "Write-up", "Gameboy"]
 categories: ["Pwn"]
