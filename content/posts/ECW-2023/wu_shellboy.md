@@ -50,7 +50,7 @@ Le curseur de sélection n'est pas changé, mais la liste d'instruction diminue 
 
 ![](images/ECW-2023/Pasted%20image%2020231112205306.png)
 
-En effet, il est possible de parcourir plus que 16 cases avec le curseur maintenant. Il est temps de se pencher sur le code source.
+En effet, il est maintenant possible de parcourir plus de 16 cases avec le curseur. Il est temps de se pencher sur le code source.
 
 Dans le fichier `inst_list.c`, on remarque la fonction `move_inst()` :
 
@@ -88,7 +88,7 @@ void move_inst(uint8_t inst1_index, uint8_t inst2_index)
 }
 ```
 
-On remarque dans ce code, que lorsque deux instructions sont de même type, et que la somme de leur répétition est inférieur à 255, alors on supprime la deuxième stack d'instructions. Or, dans notre cas, les instructions sont les même ! 
+On remarque dans ce code, que lorsque deux instructions sont de même type, et que la somme de leurs répétitions est inférieure à 255, alors on supprime la deuxième stack d'instructions. Or, dans notre cas, les instructions sont les mêmes ! 
 
 ```c
 void remove_inst(uint8_t inst_index)
@@ -110,7 +110,7 @@ void remove_inst(uint8_t inst_index)
 }
 ```
 
-Lorsque la stack d'instruction est supprimée, la variable globale `inst_count` est décrémentée. Mais ce n'est pas tout !
+Lorsque la stack d'instructions est supprimée, la variable globale `inst_count` est décrémentée. Mais ce n'est pas tout !
 
 ```c
 // ...
@@ -139,7 +139,7 @@ else if(KEY_TRIGGERED(J_SELECT) && !list_empty)
 
 Lorsqu'on supprime normalement une instruction  avec la touche `B`, la variable `inst_cusror_pos` est remise à `0`. Si  `inst_count = 0`, alors `list_empty` devient `True`. 
 
-Cependant,  on remarque que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Ce qui permet de pouvoir décrémenter `inst_count` et l'underflow pour la faire passer à `255`, tandis que `inst_cursor_pos` reste à la même position.
+Cependant,  on remarque que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Cela permet de décrémenter `inst_count` et de l'underflow pour la faire passer à `255`, tandis que `inst_cursor_pos` reste à la même position.
 
 ```c
 // Select next instruction
@@ -155,11 +155,11 @@ else if(KEY_TRIGGERED(J_UP) && !list_empty)
 
 ```
 
-De plus, on observe que la variable `inst_cursor_pos` est utilisé pour accéder aux valeurs contenues dans le tableau `inst_rpt[]`.
+De plus, on observe que la variable `inst_cursor_pos` est utilisée pour accéder aux valeurs contenues dans le tableau `inst_rpt[]`.
 
-Ce tableau contient des valeurs comprises entre `0` et `255`, correspondant au nombre de répétition de chaque instruction. En parallèle, le tableau `inst_ids[]`, contient le type d'instruction. 
+Ce tableau contient des valeurs comprises entre `0` et `255`, correspondant au nombre de répétitions de chaque instruction. En parallèle, le tableau `inst_ids[]`, contient le type d'instruction. 
 
-Dans un cas normal, ces tableaux ont une taille maximale de 16. Cependant, la variable `inst_cursor_pos` est comprise entre `0` et `inst_count` Si `inst_count` est supérieure à `16`, alors nous avons une OOB (Out-of-Bound) sur le tableau `inst_rpt[]` et `inst_ids[]`.
+Dans un cas normal, ces tableaux ont une taille maximale de 16. Cependant, la variable `inst_cursor_pos` est comprise entre `0` et `inst_count` Si `inst_count` est supérieure à `16`, alors nous avons un dépassement de tableau (Out-of-Bound) sur les tableaux `inst_rpt[]` et `inst_ids[]`.
 
 ### Ecriture arbitraire
 
