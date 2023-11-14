@@ -75,11 +75,11 @@ enableEmoji = true
   #  date format
   dateFormat = "02/01/2006"
   # website title for Open Graph and Twitter Cards
-  title = "Blog personnel de LelBy"
+  title = "Blog de LelBy"
   # website description for RSS, SEO, Open Graph and Twitter Cards
-  description = "Bienvenue sur mon blog ! Ici, je posterai des Write-Ups, des articles et des ressources en rapport avec la Cybersécurité."
+  description = "Bienvenue sur mon blog ! Ici, je publierai des Write-Ups, des articles et des ressources en lien avec la cybersécurité."
   # website images for Open Graph and Twitter Cards
-  images = ["/logo.png"]
+  images = ["/images/avatar.png"]
 
   # Header config
   [params.header]
@@ -123,7 +123,7 @@ enableEmoji = true
     # special amount of posts in each section page
     paginate = 20
     # date format (month and day)
-    dateFormat = "01-02"
+    dateFormat = "02-01"
     # amount of RSS pages
     rss = 10
 
@@ -132,7 +132,7 @@ enableEmoji = true
     # special amount of posts in each list page
     paginate = 20
     # date format (month and day)
-    dateFormat = "01-02"
+    dateFormat = "02-01"
     # amount of RSS pages
     rss = 10
 
@@ -187,7 +187,7 @@ enableEmoji = true
       #  title shown in home page (HTML format is supported)
       title = "LelBy"
       # subtitle shown in home page (HTML format is supported)
-      subtitle = "Bienvenue sur mon blog ! Ici, je posterai des Write-Ups, des articles et des ressources en rapport avec la Cybersécurité."
+      subtitle = "Bienvenue sur mon blog ! Ici, je publierai des Write-Ups, des articles et des ressources en lien avec la cybersécurité."
       # whether to use typeit animation for subtitle
       typeit = false
       # whether to show social links
@@ -237,7 +237,7 @@ enableEmoji = true
       #  whether to keep the static table of the contents in front of the post
       keepStatic = false
       # whether to make the table of the contents in the sidebar automatically collapsed
-      auto = true
+      auto = false
   #   #  KaTeX mathematical formulas
   #   [params.page.math]
   #     enable = true

