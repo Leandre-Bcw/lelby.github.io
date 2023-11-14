@@ -40,9 +40,9 @@ Dans ce jeu, nous pouvons définir une liste d'instruction permettant à notre p
 
 ## Vulnérabilité
 
-En jouant un petit peut avec le jeu (en appuyant sur toute les touches comme un bourrin :joy:) , je me suis rendu compte d'un comportement anormale avec la fonctionnalité de fusion des instructions.
+En jouant un petit peu avec le jeu (en appuyant sur toute les touches comme un bourrin :joy:) , je me suis rendu compte d'un comportement anormal avec la fonctionnalité de fusion des instructions.
 
-En effet, j'ai remarqué qu'en fusionnant une instruction avec elle même, un comportement étrange se produit : 
+En effet, j'ai remarqué qu'en fusionnant une instruction avec elle-même, un comportement étrange se produit : 
 
 ![](images/ECW-2023/Pasted%20image%2020231112205137.png)
 
@@ -189,7 +189,7 @@ Et le tableau avec les adresses :
 
 ### Exécution de code arbitraire
 
-Comme le décris ce petit morceau de code, le but du challenge est d'aller lire le flag à l'adresse `0x06FA`.
+Comme le décrit ce petit morceau de code, le but du challenge est d'aller lire le flag à l'adresse `0x06FA`.
 
 ```c
 // Check the final tile ID to check if the bot is on the flag
@@ -230,9 +230,9 @@ void simulate() {
 }
 ```
 
-La fonction a appeler est récupérée dans `inst_func[]` grâce à l'id de l'instruction. Cette id est présent dans `inst_ids[]`. L'id d'une instruction est normalement compris entre `0` et `3`. 
+La fonction à appeler est récupérée dans `inst_func[]` grâce à l'id de l'instruction. Cette id est présent dans `inst_ids[]`. L'id d'une instruction est normalement compris entre `0` et `3`. 
 
-Si l'id a une valeur supérieur à `3`, alors, le pointeur de fonction récupéré est situé en dehors de `inst_func`, entre autre dans une zone que l'on contrôle, précisément au tout début de `int_rpt[]` !
+Si l'id a une valeur supérieure à `3`, alors, le pointeur de fonction récupéré est situé en dehors de `inst_func`, entre autre dans une zone que l'on contrôle, précisément au tout début de `int_rpt[]` !
 
 - `inst_func[0]` --> <span style="color:red">0xC0B1</span>
 - `inst_func[1]` -->  <span style="color:red">0xC0B3</span>
