@@ -5,16 +5,16 @@ date: 2023-11-01
 draft: false
 author: "LelBy"
 description: "Write-Up du challenge de pwn \"Shellboy\" de l'ECW 2023"
-images: ["/images/ECW-2023/shellboy_main.png"]
+images: ["images/shellboy_main.png"]
 
 tags: ["ECW", "Write-up", "Gameboy"]
 categories: ["Pwn"]
 
-featuredImage: ""
+featuredImage: "images/shellboy_preview.png"
 featuredImagePreview: ""
 ---
 
-## Introduction
+## Description
 
 Ce challenge provient de la phase de qualification de l'ECW 2023.
 
@@ -23,9 +23,16 @@ Shellboy est un challenge de pwn se jouant sur un émulateur de GameBoy (WASMBoy
 - La cartouche compilée
 - Une API Web pour interagir avec l'instance distante 
 
-![](images/ECW-2023/shellboy_main.png)
+![](images/shellboy_main.png)
 
-## Premiers pas
+## TL;DR
+
+- Exploitation d'un `Integer underflow` en jouant avec la suppression des instructions du personnage
+- Permet un OOB Write du tableau d'instructions de déplacement pour contrôler l'index d'un tableau de pointeurs de fonction
+- Entraine un deuxième OOB en lecture du tableau des actions et une exécution de code arbitraire
+- Ecriture et exécution d'un shellcode pour lire et afficher le flag sur la GameBoy
+
+## Prise en main
 
 Dans ce jeu, nous pouvons définir une liste d'instruction permettant à notre petit personnage de se déplacer de haut en bas et de droite à gauche. En effet, il est possible :
 
@@ -36,19 +43,19 @@ Dans ce jeu, nous pouvons définir une liste d'instruction permettant à notre p
 - De fusionner ou de bouger deux instructions entre elles en appuyant sur `select` pour la première et `select` pour la seconde. Si les deux instructions sont de même type, alors elles seront fusionnées (addition de leur répétition). Si elles sont différentes, elles changeront de place dans la liste.
 - De lancer la simulation avec le bouton `start`
 
-![](images/ECW-2023/Pasted%20image%2020231112203458.png)
+![](images/Pasted%20image%2020231112203458.png)
 
-## Vulnérabilité
+## Recherche de vulnérabilités
 
-En jouant un petit peu avec le jeu (en appuyant sur toute les touches comme un bourrin :joy:) , je me suis rendu compte d'un comportement anormal avec la fonctionnalité de fusion des instructions.
+En jouant un petit peu avec le jeu (en appuyant sur toute les touches comme un bourrin) , je me suis rendu compte d'un comportement anormal avec la fonctionnalité de fusion des instructions.
 
 En effet, j'ai remarqué qu'en fusionnant une instruction avec elle-même, un comportement étrange se produit : 
 
-![](images/ECW-2023/Pasted%20image%2020231112205137.png)
+![](images/Pasted%20image%2020231112205137.png)
 
 Le curseur de sélection n'est pas changé, mais la liste d'instruction diminue tout de même. En répétant le processus un certain nombre de fois, on passe tout a coup de 0 instructions à 255.
 
-![](images/ECW-2023/Pasted%20image%2020231112205306.png)
+![](images/Pasted%20image%2020231112205306.png)
 
 En effet, il est maintenant possible de parcourir plus de 16 cases avec le curseur. Il est temps de se pencher sur le code source.
 
@@ -139,7 +146,7 @@ else if(KEY_TRIGGERED(J_SELECT) && !list_empty)
 
 Lorsqu'on supprime normalement une instruction  avec la touche `B`, la variable `inst_cusror_pos` est remise à `0`. Si  `inst_count = 0`, alors `list_empty` devient `True`. 
 
-Cependant,  on remarque que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Cela permet de décrémenter `inst_count` et de l'underflow pour la faire passer à `255`, tandis que `inst_cursor_pos` reste à la même position.
+Cependant,  on remarque dans le cas d'un swap d'instructions, que la fonction `move_inst()` est appelée sans que `inst_count` ne soit vérifiée et `inst_cursor_pos` réinitialisée. Cela permet de décrémenter `inst_count` et de l'underflow pour la faire passer à `255`, tandis que `inst_cursor_pos` reste à la même position.
 
 ```c
 // Select next instruction
@@ -159,11 +166,11 @@ De plus, on observe que la variable `inst_cursor_pos` est utilisée pour accéde
 
 Ce tableau contient des valeurs comprises entre `0` et `255`, correspondant au nombre de répétitions de chaque instruction. En parallèle, le tableau `inst_ids[]`, contient le type d'instruction. 
 
-Dans un cas normal, ces tableaux ont une taille maximale de 16. Cependant, la variable `inst_cursor_pos` est comprise entre `0` et `inst_count` Si `inst_count` est supérieure à `16`, alors nous avons un dépassement de tableau (Out-of-Bound) sur les tableaux `inst_rpt[]` et `inst_ids[]`.
+Dans un cas normal, ces tableaux ont une taille maximale de 16. Cependant, la variable `inst_cursor_pos` est comprise entre `0` et `inst_count` Si `inst_count` est supérieure à `16`, alors nous avons un Out-Of-Bound read/write sur les tableaux `inst_rpt[]` et `inst_ids[]`.
 
 ### Ecriture arbitraire
 
-Grâce à l'observation précédente, il est ainsi possible d'écrire des valeurs comprises entre `0` et `255` dans la mémoire , entre `inst_rpt` et `inst_rpt + 255`. 
+Grâce à l'observation précédente, il est ainsi possible d'écrire des valeurs comprises entre `0` et `255` dans la mémoire , entre `inst_rpt` et `inst_rpt[255]`. 
 
 Il va être nécessaire de se faire une idée de l'emplacement des variables en mémoire pour exploiter cela.
 
@@ -171,7 +178,7 @@ Il va être nécessaire de se faire une idée de l'emplacement des variables en 
 
 Cette capture montre la représentation en mémoire des variables : 
 
-![](images/ECW-2023/Pasted%20image%2020231113223153.png)
+![](images/Pasted%20image%2020231113223153.png)
 
 Et le tableau avec les adresses :
 
@@ -261,7 +268,7 @@ ram:0e5a c5              PUSH       BC
 ram:0e5b cd  9a  13      CALL       inst_func                                   
 ```
 
-Sachant que nous pouvons écrire dans `inst_ids[]` la valeur de l'id que l'on veut, il ne reste plus qu'à exploiter !
+Sachant que nous pouvons écrire dans `inst_ids[]` la valeur de l'id que l'on veut, il ne reste plus qu'à l'exploiter !
 
 ### Payload
 
@@ -394,4 +401,4 @@ if __name__ == "__main__":
 
 Et voici le flag !
 
-![](images/ECW-2023/shellboy_flag.png)
+![](images/shellboy_flag.png)
