@@ -1,7 +1,7 @@
 ---
 title: "[FCSC 2025] - Editeur de configuration"
 subtitle: ""
-date: 2025-05-01
+date: 2025-05-04
 draft: false
 author: "LelBy"
 description: "Write-Up du challenge de pwn \"Editeur de configuration \" du FCSC 2025"
@@ -22,15 +22,15 @@ featuredImagePreview: ""
 
 **Difficulté :** ⭐⭐⭐
 
-**Protections :** Full RelRO, NX, Canary, PIE, Stripped, No Src
+**Protections :** Full RelRO, NX, Canary, PIE, Stripped
 
 ## TL;DR
 
 - Exploitation d'un off-by-one null byte dans le tas (Heap) via un appel à `realloc()` mal sécurisé dans la fonction de modification d'une entrée
 - Leak d'une adresse de la heap en raison de l'absence de l'ajout d'un null byte à la fin d'une chaine de caractère
-- ``Heap Feng Shui`` suivi de l'utilisation de la technique `House of Einherjar` pour obtenir une primitive de chevauchement de chunks, permettant une lecture/écriture arbitraire
-- Leak de la ``libc`` en lisant un pointeur de ``l'arena`` via un chunk dans ``l'Unsorted Bin``
-- Exécution d'un shell en injectant une fausse `dtor_list` dans la ``TLS`` et terminaison propre du programme, appelant `__call__tls_dtors`.
+- ``Heap Feng Shui`` suivi de l'utilisation de la technique `House of Einherjar` pour obtenir une primitive de chevauchement de chunks, permettant une primitive lecture/écriture arbitraire
+- Leak de la ``libc`` en récupérant un pointeur vers ``main_arena`` via un chunk dans ``l'unsorted Bin``
+- Exécution d'un shell en injectant une fausse `dtor_list` dans la ``TLS`` et terminaison propre du programme, appelant `__call_tls_dtors`.
 
 ## Analyse du binaire
 
@@ -38,7 +38,7 @@ Ce binaire est un éditeur de configuration avec un menu assez classique. En eff
 
 ![](images/Pasted%20image%2020250503173421.png)
 
-Après avoir importé la configuration initial, il est possible de réaliser différente actions tel que l'ajout d'une entrée , la suppression d'une entrée ou la modification d'une entrée déja présente.
+Après avoir importé la configuration initiale, il est possible de réaliser différentes actions tel que l'ajout d'une entrée , la suppression d'une entrée ou la modification d'une entrée déja présente.
 
 ![](images/Pasted%20image%2020250503173616.png)
 
@@ -46,38 +46,38 @@ Le binaire étant strippé, nous allons devoir utiliser IDA pour retrouver les s
 
 ### Structures et fonctionnement
 
-On remarque dans un premier temps que les données utilisateurs sont lues grâce à la fonction `getline()`, cela aura son importance pour la suite. 
+On remarque dans un premier temps que les données utilisateurs sont lues grâce à la fonction `getline()`, cela aura son importance pour la suite, car cette fonction alloue un buffer dans la heap.
 
 Pour ajouter la toute première entrée, il faut préciser un header valide qui représentera le nom de la configuration :
 ```c
 int __fastcall config_check_header(struct config_t *pconfig)
 {
-  __ssize_t sz; // [rsp+10h] [rbp-10h]
-  char *line; // [rsp+18h] [rbp-8h]
+	__ssize_t sz; // [rsp+10h] [rbp-10h]
+	char *line; // [rsp+18h] [rbp-8h]
 
-  sz = getline(&g_line, &g_line_size, stdin);
-  if ( sz == -1 )
-    return -1;
-  line = g_line;
-  if ( *g_line == '[' )
-  {
-    if ( g_line[sz - 2] == ']' )
-    {
-      g_line[sz - 2] = 0;
-      strncpy(&pconfig->username, line + 1, 16uLL);
-      return strcmp(&pconfig->username, "PLAYER"); // <---- Valid header
-    }
-    else
-    {
-      puts("bad format header");
-      return -1;
-    }
-  }
+	sz = getline(&g_line, &g_line_size, stdin);
+	if ( sz == -1 )
+		return -1;
+	line = g_line;
+	if ( *g_line == '[' )
+	{
+		if ( g_line[sz - 2] == ']' )
+		{
+			g_line[sz - 2] = 0;
+		    strncpy(&pconfig->username, line + 1, 16uLL);
+		    return strcmp(&pconfig->username, "PLAYER"); // <---- Valid header
+	    }
+	    else
+	    {
+		    puts("bad format header");
+		    return -1;
+		}
+	}
   else
-  {
-    puts("header not found");
-    return -1;
-  }
+	{
+	    puts("header not found");
+	    return -1;
+	}
 }
 ```
 
@@ -85,7 +85,6 @@ La toute première structure créée lors de l'importation est `config_t` qui re
 
 ```c
 struct config_t
-
 {
 	char username[16];
 	__int64 unk;
@@ -99,31 +98,30 @@ Ensuite, le programme parse ligne par ligne les données récupérées dans l'en
 
 struct entry_t *__fastcall config_entry_alloc(__int64 token_size, __int64 value_size)
 {
-  struct entry_t *config; // [rsp+18h] [rbp-8h]
+	struct entry_t *config; // [rsp+18h] [rbp-8h]
 
-  config = (struct entry_t *)malloc(40uLL);
-  if ( !config )
-    return 0LL;
-  config->value = 0LL;
-  config->key = 0LL;
-  config->size = 0LL;
-  config->pPrev = 0LL;
-  config->pNext = 0LL;
-  config->key = (char *)malloc(token_size + 1);
-  if ( !config->key )
-    return 0LL;
-  config->value = (char *)malloc(value_size + 1);
-  if ( !config->value )
-    return 0LL;
-  config->key[token_size] = 0;
-  config->value[value_size] = 0;
-  config->size = value_size;
-  return config;
+	config = (struct entry_t *)malloc(40uLL);
+	if ( !config )
+	    return 0LL;
+	config->value = 0LL;
+	config->key = 0LL;
+	config->size = 0LL;
+	config->pPrev = 0LL;
+	config->pNext = 0LL;
+	config->key = (char *)malloc(token_size + 1);
+	if ( !config->key )
+		return 0LL;
+	config->value = (char *)malloc(value_size + 1);
+	if ( !config->value )
+		return 0LL;
+	config->key[token_size] = 0;
+	config->value[value_size] = 0;
+	config->size = value_size;
+	return config;
 }
-
 ```
 
-La structure qui nous intéresse le plus est `entry_t`. Cette structure est allouée dans la heap, et c'est une liste doublement chainée. Chaque `entry_t` contient un pointeur vers une clé, parmi  `name, level, team, elo, token`, un pointeur vers la valeur, ainsi que le maillon suivant et précédent de la liste doublement  chainée. Comme vu précédemment, `key` et `value` sont alloués dans la heap.
+La structure qui nous intéresse le plus est `entry_t`. Cette structure est allouée dans la heap, et c'est une liste doublement chainée. Chaque `entry_t` contient un pointeur vers une clé, parmis les noms suivant : `name, level, team, elo, token`, un pointeur vers la valeur, ainsi que le maillon suivant et précédent de la liste doublement chainée. Comme vu précédemment, `key` et `value` sont alloués dans la heap.
 
 ```c
 struct entry_t
@@ -134,7 +132,6 @@ struct entry_t
 	struct entry_t *pPrev;
 	struct entry_t *pNext;
 };
-
 ```
 
 Chaque entrées est donc ajouté à la suite, avec les pointeurs `pPrev` et `pNext` ajusté.  La liste étant parcourue à partir de la fin, il est possible d'ajouter plusieurs entrées avec le même nom de clé. Ainsi la dernière entrée ajoutée, sera la première retournée lors du parcours de la chaine.  
@@ -143,7 +140,7 @@ Chaque entrées est donc ajouté à la suite, avec les pointeurs `pPrev` et `pNe
 
 ### Off-By-One null byte
 
-Dans la fonction d'édition d'une entrée, il est possible de provoquer un débordement de 1 octet nulle. 
+Dans la fonction d'édition d'une entrée, il est possible de provoquer un débordement de 1 octet nul.
 
 ```c
 __int64 __fastcall config_edit_entry(struct config_t *pconfig)
@@ -199,9 +196,9 @@ Le fonctionnement de la fonction `realloc()` est le suivant :
 
 Lors de l'ajout d'une entrée, le champs `size` représente la taille de `value`. Si on alloue une chaine de caractère de taille, disons `0x37`, l'appel à `malloc(value_size + 1)` retournera un chunk capable de contenir au plus `0x38` bytes, ce qui est suffisant pour contenir la chaine ainsi que l'octet nulle.
 
-Cependant, dans la fonction de modification, si on ajoute une chaine de caractère de `0x38`, `realloc` va retourner le même chunk car la taille est suffisante pour stocker la chaine. Le développeur n'a pas pris en compte l'octet null dans la taille à passer à `realloc`. L'appel à `memset`, quand à lui, se fait sur `size + 1`, entrainant un débordement de un octet null sur le chunk suivant dans le tas.  
+Cependant, dans la fonction de modification, si on ajoute une chaine de caractère de `0x38`, `realloc` va retourner le même chunk car la taille est suffisante pour stocker la chaine. Le développeur n'a pas pris en compte l'octet nul dans la taille à passer à `realloc`. L'appel à `memset`, quand à lui, se fait sur `size + 1`, entrainant un débordement de un octet nul sur le chunk suivant dans la heap.  
 
-### Leak d'une adresse du tas
+### Leak d'une adresse de heap
 
 Une autre vulnérabilité est présente dans la fonction de parsing de l'entrée utilisateur. 
 
@@ -255,7 +252,7 @@ sep = strchr(line_ptr, '=');
 }
 ```
 
-Lors de l'appel à `config_entry_alloc`, un octet null est ajoutée par defaut à la fin du bloc, avant la copie en mémoire de la chaine. Par ailleurs, le bloc n'est pas remis à zero lors de l 'allocation. Il est alors possible de récupérer une adresse du tas lors de l'affichage des `entry_t` du menu. 
+Lors de l'appel à `config_entry_alloc`, un octet nul est ajouté par defaut à la fin du bloc, avant la copie en mémoire de la chaine. Par ailleurs, le bloc n'est pas remis à zero lors de l'allocation. Il est alors possible de récupérer une adresse de la heap lors de l'affichage des `entry_t` du menu. 
 
 ```c
 // ...
@@ -266,13 +263,13 @@ Lors de l'appel à `config_entry_alloc`, un octet null est ajoutée par defaut �
 // ...
 ```
 
-On observe l’utilisation de la fonction `strcspn`, qui retourne l’index du premier caractère de la chaîne source appartenant à un ensemble donné, ici, le caractère espace `' '`. Cela permet d’isoler la première partie de la chaîne, pour ne copier que la partie après l'espace.  Si cette sous chaîne est plus courte que prévu, elle est copiée **sans ajout d'octet null**. Il faut donc s’arranger pour que le nombre de caractères copiés tombe juste avant une adresse à récupérer et le tour est joué !
+On observe l’utilisation de la fonction `strcspn`, qui retourne l’index du premier caractère de la chaîne source appartenant à un ensemble donné, ici, le caractère espace `' '`. Cela permet d’isoler la première partie de la chaîne, pour ne copier que la partie après l'espace.  Si cette sous chaîne est plus courte que prévu, elle est copiée **sans ajout d'octet nul**. Il faut donc s’arranger pour que le nombre de caractères copiés tombe juste avant une adresse à récupérer et le tour est joué !
 
-Nous allons exploiter le fait qu’un chunk de type `entry_t`, une fois libéré, conserve un pointeur vers un emplacement dans le tas. L’objectif est donc de réallouer à cet emplacement un chunk de type `value`, de manière à récupérer ce pointeur. Nous appellerons `E`, un chunk contenant une structure `entry_t`, `V` un chunk, `value` et `K`, un chunk `key`.
+Nous allons exploiter le fait qu’un chunk de type `entry_t`, une fois libéré, conserve un pointeur vers un emplacement dans la heap. L’objectif est donc de réallouer à cet emplacement un chunk de type `value`, de manière à récupérer ce pointeur. Nous appellerons `E`, un chunk contenant une structure `entry_t`, `V` un chunk, `value` et `K`, un chunk `key`.
 
 ![](images/Pasted%20image%2020250504163839.png)
 
-Comme le montre ce schéma, nous allons orchestrer les allocations de manière à ce qu’un chunk `value` de taille `0x40` soit placé à l’emplacement d’une structure `entry_t` précédemment libérée. À chaque ajout dans la configuration, trois allocations sont effectuées, ce qui permet de contrôler l’ordre d’allocation dans le tas. L’adresse ainsi récupérée correspond au champ `entry_t->pPrev`.
+Comme le montre ce schéma, nous allons orchestrer les allocations de manière à ce qu’un chunk `value` de taille `0x40` soit placé à l’emplacement d’une structure `entry_t` précédemment libérée. À chaque ajout dans la configuration, trois allocations sont effectuées, ce qui permet de contrôler l’ordre d’allocation dans la heap. L’adresse ainsi récupérée correspond au champ `entry_t->pPrev`.
 Il est important de noter que la protection **Safe Linking** est activée pour les `tcache`, ce qui complique l’obtention d’un pointeur de heap valide, car les pointeurs dans les listes sont masqués par un XOR avec une valeur dérivée de l’adresse du chunk courant.
 
 ## Exploitation
@@ -288,39 +285,39 @@ Pour mettre en œuvre cette technique, plusieurs conditions doivent être réuni
 
 - Le contrôle du champ `prev_size` du chunk cible qui doit être égale à la distance entre le fake chunk et le chunk victime
 - Un leak d’adresse dans la heap
-- La création d’un faux chunk satisfaisant les vérifications tel que **Unsafe Unlink** dans le mécanisme des `Unsorted Bin`, s'assurant que la liste doublement chainée n'est pas corrompue.
+- La création d’un faux chunk satisfaisant les vérifications tel que **Unsafe Unlink** lorsque le chunk sera retiré de `l'unsorted Bin`, s'assurant que la liste doublement chainée n'est pas corrompue.
 
 ![](images/Pasted%20image%2020250504163904.png)
 
-L'objectif est donc d'obtenir un **chevauchement de chunk** dans une zone **contrôlé par l'utilisateur** pour pouvoir altérée son contenu. Il va donc falloir jouer avec les allocations pour obtenir une configuration avantageuse pour réaliser cette attaque.
+L'objectif est donc d'obtenir un **chevauchement de chunk** dans une zone **contrôlé par l'utilisateur** pour pouvoir altérer son contenu. Il va donc falloir jouer avec les allocations pour obtenir une configuration avantageuse pour réaliser cette attaque.
 
 ### Heap Feng Shui
 
 Avant de lancer l'attaque, il est nécessaire de mettre la heap dans un état bien précis, en respectant plusieurs contraintes que nous impose le challenge :
 
-- Le chunk victime doit avoir une taille d’au moins `0x100`. En effet, le champ `mchunk_size` encode à la fois la taille du chunk et le flag `PREV_INUSE`. Ainsi, si l’on écrase le LSB avec un octet nul, cela ne doit pas affecter la taille effective du chunk.
+- Le chunk victime doit avoir une taille d’au moins `0x100`. En effet, le champ `mchunk_size` d'un chunk `malloc` encode à la fois la taille du chunk et le flag `PREV_INUSE`. Ainsi, si l’on écrase le LSB avec un octet nul, cela ne doit pas affecter la taille effective du chunk.
 - Ce chunk ne doit pas appartenir aux `fastbins`, car ceux-ci ne sont pas consolidés lors des appels à `free`.
-- Le `tcache[0x100]` doit être saturé avant de libérer le chunk victime, afin que celui-ci soit placé dans l’`unsorted bin`.
+- Le `tcache[0x100]` doit être saturé avant de libérer le chunk victime, afin que celui-ci soit placé dans `l'unsorted bin`.
 - Il faut parvenir à placer deux chunks `value` consécutifs en mémoire, ce qui est crucial pour manipuler les métadonnées du chunk suivant.
-- Enfin, le buffer alloué par `getline` ne doit pas excéder `0x400`, afin de rester dans les plages de taille gérées par les `tcaches`.
-- Pour écrire dans le champ `PREV_SIZE`, on peut réutiliser plusieurs fois la fonction de modification d'une entrée — qui utilise `realloc()` suivi d’un `memset(0)` — afin d'écrire des octets null (`\x00`) un par un.
+- Le buffer alloué par `getline` ne doit pas excéder `0x400`, afin de rester dans les plages de taille gérées par les `tcaches`.
+- Enfin, pour écrire dans le champ `PREV_SIZE`, on peut réutiliser plusieurs fois la fonction de modification d'une entrée — qui utilise `realloc()` suivi d’un `memset(0)` — afin d'écrire des octets null (`\x00`) un par un pour le remettre à zéro, avant d'y mettre une valeur.
 
 Le schéma suivant montre les différentes étapes de l'attaque permettant d'obtenir une structure `entry_t` dans le buffer de `getline`, nous permettant d'obtenir une primitive d'écriture et de lecture arbitraire.
 
 ![](images/Pasted%20image%2020250504190525.png)
 
-Il est nécessaire à la fin de l'attaque, de vider le `tcache[0x30]` pour permettre à `malloc` d'allouer un chunk à partir de `l'Unsorted bin`.
+Il est nécessaire à la fin de l'attaque, de vider le `tcache[0x30]` pour permettre à `malloc` d'allouer un chunk à partir de `l'unsorted bin`.
 
 ### Leak d'une adresse de ``libc``
 
-Pour récupérer une adresse de `libc`, nous pouvons utiliser notre primitive de lecture arbitraire pour aller lire le pointeur `FD` du chunk contenue dans `l'unsorted bin`. On va donc réécrire le pointeur `value` de la structure `entry_t` que nous contrôlons. Une fois que le menu affichera les paires de `key` et `value`, nous pourrons récupérer l'adresse vers `main_arena`, permettant de calculer la base de la `libc`.
+Pour récupérer une adresse de `libc`, nous pouvons utiliser notre primitive de lecture arbitraire pour aller lire le pointeur `FD` du chunk contenu dans `l'unsorted bin`. On va donc réécrire le pointeur `value` de la structure `entry_t` que nous contrôlons. Une fois que le menu affichera les paires de `key` et `value`, nous pourrons récupérer l'adresse vers `main_arena`, permettant de calculer la base de la `libc`.
 
 ![](images/Pasted%20image%2020250504234904.png)
 
 
 ### Exécution via `__call_tls_dtors`
 
-Lors de la terminaison normale du programme, ou à la suite d’un appel à `exit()`, la fonction `__call_tls_dtors` est invoquée afin d’exécuter les destructeurs TLS (Thread-Local Storage). En falsifiant la structure pointé par `tls_dtor_list`, il est possible de détourner ce mécanisme pour exécuter un appel arbitraire lors de la fin du programme. 
+Lors de la terminaison normale du programme, ou à la suite d’un appel à `exit()`, la fonction `__call_tls_dtors` est invoquée afin d’exécuter les destructeurs TLS (Thread-Local Storage). En falsifiant la structure pointée par `tls_dtor_list`, il est possible de détourner ce mécanisme pour exécuter un appel arbitraire lors de la fin du programme. 
 
 Nous allons donc forger une fausse structure de type `struct dtor_list`, puis faire en sorte que le pointeur global `tls_dtor_list` la référence.
 
@@ -353,7 +350,7 @@ aarb_write(tls_dtors_list_addr + 64, p64(rol((system ^ tls_cookie), 0x11, 64)), 
 aarb_write(tls_dtors_list_addr + 72, p64(binsh), 8)
 ```
 
-Avant d'obtenir un shell, il ne reste plus qu'à écrire une dernière fois notre structure `entry_t` pour mettre à 0 `pNext` et `pPrev` et quitter le programme proprement pour exécuter notre shell !
+Avant d'obtenir un shell, il ne reste plus qu'à écrire une dernière fois notre structure `entry_t` pour mettre à 0 `pNext` et `pPrev`, permettant ainsi de ne pas faire crasher le programme lors de l'unlinking des maillons, et quitter le programme proprement pour exécuter notre shell !
 
 ## Flag
 
@@ -608,7 +605,5 @@ if __name__ == "__main__":
     log.info("Profit :)")
 
     p.interactive()
-
-
 
 ```
