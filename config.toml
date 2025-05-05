@@ -14,12 +14,12 @@ languageName = "Français"
 # default amount of posts in each pages
 paginate = 8
 # google analytics code [UA-XXXXXXXX-X]
-googleAnalytics = ""
+googleAnalytics = "G-0ZQGWVDT9V"
 # copyright description used only for seo schema
-copyright = ""
+copyright = "LelBy"
 
 # whether to use robots.txt
-# enableRobotsTXT = true
+enableRobotsTXT = true
 # whether to use git commit log
 enableGitInfo = true
 # whether to use emoji code
@@ -183,7 +183,7 @@ enableEmoji = true
       # Gravatar Email for preferred avatar in home page
       gravatarEmail = ""
       # URL of avatar shown in home page
-      avatarURL = "/images/avatar.png"
+      avatarURL = "/avatar.png"
       #  title shown in home page (HTML format is supported)
       title = "LelBy"
       # subtitle shown in home page (HTML format is supported)
@@ -206,8 +206,8 @@ enableEmoji = true
 
   # Social config about the author
   [params.social]
-    GitHub = "Leandre-Bcw"
-    RootMe= "LelBy"
+    GitHub = "lelby54"
+    RootMe = "LelBy"
     #Linkedin = ""
 
   #  Page global config
@@ -432,14 +432,14 @@ enableEmoji = true
   #   # thumbnail URL
   #   thumbnailUrl = ""
 
-  # #  Analytics config
-  # [params.analytics]
-  #   enable = false
-  #   # Google Analytics
-  #   [params.analytics.google]
-  #     id = ""
-  #     # whether to anonymize IP
-  #     anonymizeIP = true
+  #  Analytics config
+  [params.analytics]
+    enable = true
+    # Google Analytics
+    [params.analytics.google]
+      id = "11183178669"
+      # whether to anonymize IP
+      anonymizeIP = true
     # # Fathom Analytics
     # [params.analytics.fathom]
     #   id = ""
@@ -508,10 +508,10 @@ enableEmoji = true
     endLevel = 6
 
 # # Sitemap config
-# [sitemap]
-#   changefreq = "weekly"
-#   filename = "sitemap.xml"
-#   priority = 0.5
+[sitemap]
+  changefreq = "monthly"
+  filename = "sitemap.xml"
+  priority = 0.7
 
 # # Permalinks config
 # [Permalinks]
