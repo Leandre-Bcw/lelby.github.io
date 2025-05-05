@@ -437,7 +437,7 @@ enableEmoji = true
     enable = true
     # Google Analytics
     [params.analytics.google]
-      id = "11183178669"
+      id = "G-0ZQGWVDT9V"
       # whether to anonymize IP
       anonymizeIP = true
     # # Fathom Analytics
